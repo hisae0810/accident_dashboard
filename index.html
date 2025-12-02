@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚗 車両事故状況ダッシュボード</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); margin-bottom: 20px; text-align: center; }
+        .header h1 { font-size: 2.5em; color: #667eea; margin-bottom: 10px; }
+        .file-upload { margin: 20px 0; padding: 20px; background: #f5f5f5; border-radius: 10px; border: 2px dashed #667eea; }
+        .file-upload input[type="file"] { display: none; }
+        .file-upload label { display: inline-block; padding: 12px 30px; background: #667eea; color: white; border-radius: 25px; cursor: pointer; font-weight: bold; transition: all 0.3s; margin-right: 10px; }
+        .file-upload label:hover { background: #5568d3; transform: translateY(-2px); }
+        .clear-btn { padding: 12px 30px; background: #ff6b6b; color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+        .clear-btn:hover { background: #ff5252; transform: translateY(-2px); }
+        .reload-btn { padding: 12px 30px; background: #6bcf7f; color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; transition: all 0.3s; margin-left: 10px; }
+        .reload-btn:hover { background: #5ab96b; transform: translateY(-2px); }
+        .note { background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0; border-left: 5px solid #ffc107; font-size: 0.9em; }
+        .note strong { color: #856404; }
+        .info-note { background: #e3f2fd; padding: 15px; border-radius: 10px; margin: 20px 0; border-left: 5px solid #2196F3; font-size: 0.9em; }
+        .info-note strong { color: #1565C0; }
+        .header-info { display: flex; justify-content: center; align-items: center; gap: 20px; margin: 15px 0; flex-wrap: wrap; }
+        .data-status { padding: 8px 15px; background: #6bcf7f; color: white; border-radius: 15px; font-size: 0.9em; font-weight: bold; display: none; }
+        .data-source { padding: 8px 15px; background: #2196F3; color: white; border-radius: 15px; font-size: 0.9em; font-weight: bold; display: none; }
+        .year-selector { display: flex; justify-content: center; gap: 15px; margin: 20px 0; flex-wrap: wrap; }
+        .year-btn { padding: 12px 30px; font-size: 1.1em; font-weight: bold; border: 3px solid #667eea; background: white; color: #667eea; border-radius: 25px; cursor: pointer; transition: all 0.3s; }
+        .year-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3); }
+        .year-btn.active { background: #667eea; color: white; }
+        .year-btn[data-year="all"] { border-color: #9C27B0; color: #9C27B0; }
+        .year-btn[data-year="all"].active { background: #9C27B0; color: white; }
+        .toggle-btn { padding: 10px 25px; border: 2px solid #764ba2; background: white; color: #764ba2; border-radius: 20px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+        .toggle-btn.active { background: #764ba2; color: white; }
+        .toggle-btn:hover { transform: translateY(-2px); }
+        .toggle-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; transition: transform 0.3s; }
+        .stat-card:hover { transform: translateY(-5px); }
+        .stat-icon { font-size: 3em; margin-bottom: 10px; }
+        .stat-value { font-size: 2em; font-weight: bold; color: #667eea; margin: 10px 0; }
+        .stat-value.money { color: #ff6b6b; }
+        .stat-label { font-size: 1.1em; color: #666; }
+        .stat-change { display: inline-block; margin-top: 8px; padding: 5px 12px; border-radius: 15px; font-size: 0.9em; font-weight: bold; }
+        .stat-change.increase { background: #ffe0e0; color: #d32f2f; }
+        .stat-change.decrease { background: #e0f7e0; color: #2e7d32; }
+        .comparison-section { display: none; margin-bottom: 20px; }
+        .comparison-section.active { display: block; }
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .chart-card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .chart-title { font-size: 1.3em; font-weight: bold; margin-bottom: 20px; color: #667eea; }
+        .table-card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); overflow-x: auto; margin-bottom: 20px; }
+        .year-badge { display: inline-block; padding: 5px 12px; background: #764ba2; color: white; border-radius: 15px; font-size: 0.8em; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #667eea; color: white; font-weight: bold; }
+        tr:hover { background: #f5f5f5; }
+        .badge { display: inline-block; padding: 5px 10px; border-radius: 20px; font-size: 0.85em; font-weight: bold; }
+        .badge-danger { background: #ff6b6b; color: white; }
+        .badge-warning { background: #ffd93d; color: #333; }
+        .badge-success { background: #6bcf7f; color: white; }
+        .accident-breakdown { display: flex; gap: 8px; flex-wrap: wrap; }
+        .breakdown-item { padding: 4px 8px; border-radius: 12px; font-size: 0.85em; font-weight: bold; }
+        .breakdown-item.harm { background: #ffe0e0; color: #d32f2f; }
+        .breakdown-item.victim { background: #fff3cd; color: #856404; }
+        .breakdown-item.self { background: #e0e0e0; color: #424242; }
+        .year-detail { font-size: 0.75em; color: #999; margin-top: 3px; }
+        .highlight-row { background: #fff3cd !important; }
+        .zero-row { background: #f0fff0 !important; }
+        .notification { position: fixed; top: 20px; right: 20px; padding: 15px 25px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: none; z-index: 1000; color: white; font-weight: bold; animation: slideIn 0.3s ease; }
+        .notification.success { background: #6bcf7f; }
+        .notification.error { background: #ff6b6b; }
+        .notification.info { background: #2196F3; }
+        @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .details-section { display: none; margin-top: 20px; }
+        .details-section.active { display: block; }
+        .insight-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; border-radius: 10px; margin-bottom: 15px; }
+        .empty-state { grid-column: 1/-1; text-align: center; padding: 60px 20px; background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .empty-state-icon { font-size: 5em; margin-bottom: 20px; opacity: 0.3; }
+        .empty-state-text { font-size: 1.3em; color: #999; }
+        .loading { display: none; text-align: center; padding: 40px; }
+        .loading.active { display: block; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="notification" id="notification"></div>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 車両事故状況ダッシュボード</h1>
+            <p>事故データ分析システム</p>
+            <div class="info-note">
+                <strong>📌 データ読み込みについて</strong><br>
+                ページを開くと自動的にデフォルトデータを読み込みます。別のCSVファイルをアップロードすることも可能です。
+            </div>
+            <div class="file-upload">
+                <label for="csvFile">📁 別のCSVファイルを読み込む</label>
+                <input type="file" id="csvFile" accept=".csv" />
+                <button class="reload-btn" id="reloadBtn">🔄 デフォルトデータを再読み込み</button>
+                <button class="clear-btn" id="clearBtn">🗑️ データをクリア</button>
+                <p style="margin-top: 10px; color: #666; font-size: 0.9em;">形式: 該当年度,事故日,事故受付日,営業所,部門,社員番号,運転者,登録番号,加害/被害,人身,物損,総額,持ち出し</p>
+            </div>
+            <div class="note"><strong>⚠️ 金額データについて</strong><br>総額・持ち出し額は一部データが未入力のため、参考値として表示しています。</div>
+            <div class="header-info">
+                <span id="lastUpdated"></span>
+                <span class="data-status" id="dataStatus"></span>
+                <span class="data-source" id="dataSource"></span>
+            </div>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>データを読み込んでいます...</p>
+            </div>
+            <div class="year-selector">
+                <button class="year-btn" data-year="all">📊 全年度（通年）</button>
+                <button class="year-btn" data-year="2023">📅 2023年度</button>
+                <button class="year-btn" data-year="2024">📅 2024年度</button>
+                <button class="year-btn active" data-year="2025">📅 2025年度</button>
+            </div>
+            <div style="text-align: center;">
+                <button class="toggle-btn" id="comparisonToggle">📊 年度比較を表示</button>
+            </div>
+        </div>
+        <div class="stats-grid" id="statsGrid">
+            <div class="empty-state">
+                <div class="empty-state-icon">📊</div>
+                <div class="empty-state-text">データを読み込んでいます...</div>
+            </div>
+        </div>
+        <div class="comparison-section" id="comparisonSection">
+            <div class="charts-grid">
+                <div class="chart-card"><div class="chart-title">📈 年度別事故件数比較（3年分）</div><canvas id="yearComparisonChart"></canvas></div>
+                <div class="chart-card"><div class="chart-title">💰 年度別損害額比較（参考）</div><canvas id="costComparisonChart"></canvas></div>
+            </div>
+        </div>
+        <div class="charts-grid" id="mainCharts" style="display: none;">
+            <div class="chart-card"><div class="chart-title">📊 事故種別の割合</div><canvas id="accidentTypeChart"></canvas></div>
+            <div class="chart-card"><div class="chart-title">📅 月別事故発生推移</div><canvas id="monthlyChart"></canvas></div>
+        </div>
+        <div class="charts-grid" id="detailCharts" style="display: none;">
+            <div class="chart-card"><div class="chart-title">🏭 部門別事故件数</div><canvas id="departmentChart"></canvas></div>
+            <div class="chart-card"><div class="chart-title">🏢 営業所別事故件数</div><canvas id="officeChart"></canvas></div>
+        </div>
+        <div class="table-card" id="departmentTable" style="display: none;">
+            <div class="chart-title">🏭 部門別集計</div>
+            <table id="departmentStatsTable">
+                <thead><tr><th>部門</th><th>事故件数</th><th>事故種別内訳</th><th>総損害額（参考）</th><th>平均損害額（参考）</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="table-card" id="officeTable" style="display: none;">
+            <div class="chart-title">🏢 営業所別集計（全営業所）</div>
+            <table id="officeStatsTable">
+                <thead><tr><th>営業所</th><th>部門</th><th>事故件数</th><th>事故種別内訳</th><th>総損害額（参考）</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="table-card" id="repeatTable" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <span class="chart-title" style="margin: 0;">⚠️ 複数回事故者リスト（全年度）</span>
+                <span class="year-badge">📊 3年間データ</span>
+            </div>
+            <table id="repeatOffendersTable">
+                <thead><tr><th>🚗</th><th>運転者</th><th>営業所</th><th>事故回数</th><th>事故内訳</th><th>総損害額（参考）</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div id="detailsToggleContainer" style="text-align: center; margin: 20px 0; display: none;">
+            <button class="toggle-btn" id="detailsToggle">📈 時系列分析を表示</button>
+        </div>
+        <div class="details-section" id="detailsSection">
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-title">📆 曜日別事故発生傾向</div>
+                    <div id="dayInsight" class="insight-box"></div>
+                    <canvas id="dayOfWeekChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">🗓️ 月内日付傾向</div>
+                    <div id="periodInsight" class="insight-box"></div>
+                    <canvas id="dayPeriodChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let accidents2023 = [], accidents2024 = [], accidents2025 = [], currentYear = 2025, currentAccidents = [], charts = {}, comparisonMode = false;
+        let dataSource = 'default';
+        const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+        const DEFAULT_CSV_PATH = 'accident_data.csv';
+        
+        function loadFromStorage() {
+            const s23 = localStorage.getItem('accidents2023');
+            const s24 = localStorage.getItem('accidents2024');
+            const s25 = localStorage.getItem('accidents2025');
+            const source = localStorage.getItem('dataSource');
+            
+            if (s23) accidents2023 = JSON.parse(s23);
+            if (s24) accidents2024 = JSON.parse(s24);
+            if (s25) accidents2025 = JSON.parse(s25);
+            if (source) dataSource = source;
+            
+            currentAccidents = getCurrentYearAccidents();
+            updateDataStatus();
+        }
+        
+        function getCurrentYearAccidents() {
+            if (currentYear === 'all') return [...accidents2023, ...accidents2024, ...accidents2025];
+            if (currentYear === 2023) return accidents2023;
+            if (currentYear === 2024) return accidents2024;
+            return accidents2025;
+        }
+        
+        function saveToStorage() {
+            localStorage.setItem('accidents2023', JSON.stringify(accidents2023));
+            localStorage.setItem('accidents2024', JSON.stringify(accidents2024));
+            localStorage.setItem('accidents2025', JSON.stringify(accidents2025));
+            localStorage.setItem('dataSource', dataSource);
+        }
+        
+        function updateDataStatus() {
+            const total = accidents2023.length + accidents2024.length + accidents2025.length;
+            const status = document.getElementById('dataStatus');
+            const source = document.getElementById('dataSource');
+            
+            if (total > 0) {
+                status.textContent = `📊 データ読込済（2023: ${accidents2023.length}件、2024: ${accidents2024.length}件、2025: ${accidents2025.length}件）`;
+                status.style.display = 'inline-block';
+                
+                if (dataSource === 'default') {
+                    source.textContent = '📁 デフォルトデータ';
+                    source.style.background = '#2196F3';
+                } else {
+                    source.textContent = '📤 アップロードデータ';
+                    source.style.background = '#9C27B0';
+                }
+                source.style.display = 'inline-block';
+            } else {
+                status.style.display = 'none';
+                source.style.display = 'none';
+            }
+        }
+        
+        function showNotification(msg, type = 'success') {
+            const n = document.getElementById('notification');
+            n.textContent = msg;
+            n.className = `notification ${type}`;
+            n.style.display = 'block';
+            setTimeout(() => n.style.display = 'none', 3000);
+        }
+        
+        function showLoading(show) {
+            const loading = document.getElementById('loading');
+            loading.classList.toggle('active', show);
+        }
+        
+        async function loadDefaultCSV() {
+            showLoading(true);
+            try {
+                const response = await fetch(DEFAULT_CSV_PATH);
+                if (!response.ok) {
+                    throw new Error('CSVファイルが見つかりません');
+                }
+                const csvText = await response.text();
+                parseCSV(csvText, 'default');
+                showNotification('✅ デフォルトデータを読み込みました', 'success');
+            } catch (error) {
+                console.error('CSV読み込みエラー:', error);
+                showNotification('⚠️ デフォルトデータの読み込みに失敗しました。手動でCSVをアップロードしてください。', 'info');
+                document.getElementById('statsGrid').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📁</div>
+                        <div class="empty-state-text">CSVファイルをアップロードしてください</div>
+                    </div>
+                `;
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        function parseCSV(csv, source) {
+            const lines = csv.split('\n');
+            const newAccidents = [];
+            
+            if (lines.length > 0) {
+                const header = lines[0].toLowerCase();
+                if (!header.includes('該当年度') && !header.includes('事故日')) {
+                    showNotification('❌ CSVフォーマットが正しくありません', 'error');
+                    return;
+                }
+            }
+            
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                const cols = line.split(',');
+                if (cols.length >= 13) {
+                    const year = parseInt(cols[0]);
+                    if (year === 2023 || year === 2024 || year === 2025) {
+                        newAccidents.push({
+                            year: year,
+                            date: cols[1].trim(),
+                            office: cols[3].trim(),
+                            department: cols[4].trim(),
+                            driver: cols[6].trim(),
+                            type: cols[8].trim(),
+                            total: parseInt(cols[11]) || 0,
+                            outOfPocket: parseInt(cols[12]) || 0
+                        });
+                    }
+                }
+            }
+            
+            accidents2023 = newAccidents.filter(a => a.year === 2023);
+            accidents2024 = newAccidents.filter(a => a.year === 2024);
+            accidents2025 = newAccidents.filter(a => a.year === 2025);
+            dataSource = source;
+            saveToStorage();
+            currentAccidents = getCurrentYearAccidents();
+            updateDataStatus();
+            updateDashboard();
+        }
+        
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            showLoading(true);
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    parseCSV(event.target.result, 'uploaded');
+                    showNotification(`✅ CSVファイルを読み込みました！（2023: ${accidents2023.length}件、2024: ${accidents2024.length}件、2025: ${accidents2025.length}件）`);
+                } catch (error) {
+                    showNotification('❌ CSVファイルの読み込みに失敗しました', 'error');
+                } finally {
+                    showLoading(false);
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        });
+        
+        document.getElementById('reloadBtn').addEventListener('click', function() {
+            if (confirm('🔄 デフォルトデータを再読み込みしますか？')) {
+                loadDefaultCSV();
+            }
+        });
+        
+        document.getElementById('clearBtn').addEventListener('click', function() {
+            if (confirm('⚠️ すべてのデータをクリアしますか？')) {
+                localStorage.clear();
+                accidents2023 = [];
+                accidents2024 = [];
+                accidents2025 = [];
+                currentAccidents = [];
+                dataSource = 'default';
+                updateDataStatus();
+                updateDashboard();
+                showNotification('🗑️ データをクリアしました');
+                document.getElementById('statsGrid').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📁</div>
+                        <div class="empty-state-text">CSVファイルをアップロードしてください</div>
+                    </div>
+                `;
+            }
+        });
+        
+        function updateLastUpdatedTime() {
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = `最終更新: ${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        }
+        
+        function calculateStats(accidents) {
+            const totalAccidents = accidents.length;
+            const totalCost = accidents.reduce((sum, acc) => sum + acc.total, 0);
+            const totalOutOfPocket = accidents.reduce((sum, acc) => sum + acc.outOfPocket, 0);
+            const avgCost = totalAccidents > 0 ? totalCost / totalAccidents : 0;
+            const typeCount = {};
+            accidents.forEach(acc => {
+                typeCount[acc.type] = (typeCount[acc.type] || 0) + 1;
+            });
+            return { totalAccidents, totalCost, totalOutOfPocket, avgCost, typeCount };
+        }
+        
+        function getChangeHTML(current, previous, unit, isNegativeBad = true) {
+            const diff = current - previous;
+            const percent = previous !== 0 ? ((diff / previous) * 100).toFixed(1) : 0;
+            let className = 'neutral', arrow = '→';
+            if (diff > 0) {
+                className = isNegativeBad ? 'increase' : 'decrease';
+                arrow = '↑';
+            } else if (diff < 0) {
+                className = isNegativeBad ? 'decrease' : 'increase';
+                arrow = '↓';
+            }
+            return `<div class="stat-change ${className}">${arrow} ${Math.abs(diff).toLocaleString()}${unit} (${percent}%)</div>`;
+        }
+        
+        function displayStats() {
+            const hasData = currentAccidents.length > 0;
+            
+            if (!hasData) {
+                document.getElementById('statsGrid').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📊</div>
+                        <div class="empty-state-text">CSVファイルを読み込んでください</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const stats = calculateStats(currentAccidents);
+            let prevStats = null;
+            if (comparisonMode && currentYear !== 'all') {
+                if (currentYear === 2025) prevStats = calculateStats(accidents2024);
+                else if (currentYear === 2024) prevStats = calculateStats(accidents2023);
+            }
+            
+            document.getElementById('statsGrid').innerHTML = `
+                <div class="stat-card"><div class="stat-icon">🚨</div><div class="stat-value">${stats.totalAccidents}</div><div class="stat-label">総事故件数</div>${comparisonMode && prevStats ? getChangeHTML(stats.totalAccidents, prevStats.totalAccidents, '件', true) : ''}</div>
+                <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-value money">¥${stats.totalCost.toLocaleString()}</div><div class="stat-label">総損害額（参考）</div>${comparisonMode && prevStats ? getChangeHTML(stats.totalCost, prevStats.totalCost, '円', true) : ''}</div>
+                <div class="stat-card"><div class="stat-icon">💸</div><div class="stat-value money">¥${stats.totalOutOfPocket.toLocaleString()}</div><div class="stat-label">総持ち出し額（参考）</div>${comparisonMode && prevStats ? getChangeHTML(stats.totalOutOfPocket, prevStats.totalOutOfPocket, '円', true) : ''}</div>
+                <div class="stat-card"><div class="stat-icon">⚠️</div><div class="stat-value money">¥${Math.round(stats.avgCost).toLocaleString()}</div><div class="stat-label">平均損害額（参考）</div>${comparisonMode && prevStats ? getChangeHTML(Math.round(stats.avgCost), Math.round(prevStats.avgCost), '円', true) : ''}</div>
+            `;
+        }
+        
+        function updateCharts() {
+            const hasData = currentAccidents.length > 0;
+            document.getElementById('mainCharts').style.display = hasData ? 'grid' : 'none';
+            document.getElementById('detailCharts').style.display = hasData ? 'grid' : 'none';
+            document.getElementById('detailsToggleContainer').style.display = hasData ? 'block' : 'none';
+            
+            if (!hasData) return;
+            
+            const stats = calculateStats(currentAccidents);
+            
+            if (charts.accidentType) charts.accidentType.destroy();
+            charts.accidentType = new Chart(document.getElementById("accidentTypeChart"), {
+                type: "doughnut",
+                data: {
+                    labels: Object.keys(stats.typeCount),
+                    datasets: [{
+                        data: Object.values(stats.typeCount),
+                        backgroundColor: ["#ffd93d", "#ff6b6b", "#6bcf7f"]
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: "bottom" } } }
+            });
+            
+            const monthlyCount = {};
+            currentAccidents.forEach(acc => {
+                const month = acc.date.substring(0, 7);
+                monthlyCount[month] = (monthlyCount[month] || 0) + 1;
+            });
+            const sortedMonths = Object.keys(monthlyCount).sort();
+            
+            if (charts.monthly) charts.monthly.destroy();
+            charts.monthly = new Chart(document.getElementById("monthlyChart"), {
+                type: "line",
+                data: {
+                    labels: sortedMonths,
+                    datasets: [{
+                        data: sortedMonths.map(m => monthlyCount[m]),
+                        borderColor: "#667eea",
+                        backgroundColor: "rgba(102, 126, 234, 0.1)",
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+            
+            const deptCount = {};
+            currentAccidents.forEach(acc => {
+                deptCount[acc.department] = (deptCount[acc.department] || 0) + 1;
+            });
+            
+            if (charts.department) charts.department.destroy();
+            charts.department = new Chart(document.getElementById("departmentChart"), {
+                type: "bar",
+                data: {
+                    labels: Object.keys(deptCount),
+                    datasets: [{
+                        data: Object.values(deptCount),
+                        backgroundColor: "#8b5cf6",
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+            
+            const officeCount = {};
+            currentAccidents.forEach(acc => {
+                officeCount[acc.office] = (officeCount[acc.office] || 0) + 1;
+            });
+            
+            if (charts.office) charts.office.destroy();
+            charts.office = new Chart(document.getElementById("officeChart"), {
+                type: "bar",
+                data: {
+                    labels: Object.keys(officeCount),
+                    datasets: [{
+                        data: Object.values(officeCount),
+                        backgroundColor: "#764ba2",
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+            
+            const dayOfWeekCount = [0, 0, 0, 0, 0, 0, 0];
+            currentAccidents.forEach(acc => {
+                dayOfWeekCount[new Date(acc.date).getDay()]++;
+            });
+            const maxDay = dayOfWeekCount.indexOf(Math.max(...dayOfWeekCount));
+            document.getElementById('dayInsight').innerHTML = `<strong>📊 傾向:</strong> ${dayNames[maxDay]}曜日が最多（${dayOfWeekCount[maxDay]}件）`;
+            
+            if (charts.dayOfWeek) charts.dayOfWeek.destroy();
+            charts.dayOfWeek = new Chart(document.getElementById("dayOfWeekChart"), {
+                type: "bar",
+                data: {
+                    labels: dayNames,
+                    datasets: [{
+                        data: dayOfWeekCount,
+                        backgroundColor: dayOfWeekCount.map((c, i) => i === maxDay ? "#ff6b6b" : "#764ba2"),
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+            
+            const periodCount = { "上旬": 0, "中旬": 0, "下旬": 0 };
+            currentAccidents.forEach(acc => {
+                const day = new Date(acc.date).getDate();
+                if (day <= 10) periodCount["上旬"]++;
+                else if (day <= 20) periodCount["中旬"]++;
+                else periodCount["下旬"]++;
+            });
+            const maxPeriod = Object.entries(periodCount).reduce((a, b) => a[1] > b[1] ? a : b);
+            document.getElementById('periodInsight').innerHTML = `<strong>📊 傾向:</strong> ${maxPeriod[0]}に集中（${maxPeriod[1]}件）`;
+            
+            if (charts.dayPeriod) charts.dayPeriod.destroy();
+            charts.dayPeriod = new Chart(document.getElementById("dayPeriodChart"), {
+                type: "bar",
+                data: {
+                    labels: Object.keys(periodCount),
+                    datasets: [{
+                        data: Object.values(periodCount),
+                        backgroundColor: ["#667eea", "#764ba2", "#8b5cf6"],
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+        }
+        
+        function updateComparisonCharts() {
+            const stats2023 = calculateStats(accidents2023);
+            const stats2024 = calculateStats(accidents2024);
+            const stats2025 = calculateStats(accidents2025);
+            
+            if (charts.yearComparison) charts.yearComparison.destroy();
+            charts.yearComparison = new Chart(document.getElementById("yearComparisonChart"), {
+                type: "bar",
+                data: {
+                    labels: ["2023年度", "2024年度", "2025年度"],
+                    datasets: [{
+                        data: [stats2023.totalAccidents, stats2024.totalAccidents, stats2025.totalAccidents],
+                        backgroundColor: ["#5568d3", "#667eea", "#764ba2"],
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+            
+            if (charts.costComparison) charts.costComparison.destroy();
+            charts.costComparison = new Chart(document.getElementById("costComparisonChart"), {
+                type: "bar",
+                data: {
+                    labels: ["2023年度", "2024年度", "2025年度"],
+                    datasets: [{
+                        data: [stats2023.totalCost, stats2024.totalCost, stats2025.totalCost],
+                        backgroundColor: ["#ff5252", "#ff6b6b", "#ff8787"],
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+        
+        function updateTables() {
+            const hasData = currentAccidents.length > 0 || accidents2023.length > 0 || accidents2024.length > 0 || accidents2025.length > 0;
+            document.getElementById('departmentTable').style.display = hasData ? 'block' : 'none';
+            document.getElementById('officeTable').style.display = hasData ? 'block' : 'none';
+            document.getElementById('repeatTable').style.display = hasData ? 'block' : 'none';
+            
+            if (!hasData) return;
+            
+            const deptStats = {};
+            const officeStats = {};
+            const allAccidents = [...accidents2023, ...accidents2024, ...accidents2025];
+            
+            currentAccidents.forEach(acc => {
+                if (!deptStats[acc.department]) {
+                    deptStats[acc.department] = { count: 0, total: 0, types: { "加害": 0, "被害": 0, "自損自弁": 0 } };
+                }
+                deptStats[acc.department].count++;
+                deptStats[acc.department].total += acc.total;
+                deptStats[acc.department].types[acc.type]++;
+            });
+            
+            allAccidents.forEach(acc => {
+                if (!officeStats[acc.office]) {
+                    officeStats[acc.office] = { dept: acc.department, count: 0, total: 0, types: { "加害": 0, "被害": 0, "自損自弁": 0 } };
+                }
+            });
+            
+            currentAccidents.forEach(acc => {
+                officeStats[acc.office].count++;
+                officeStats[acc.office].total += acc.total;
+                officeStats[acc.office].types[acc.type]++;
+            });
+            
+            let deptHTML = '';
+            Object.entries(deptStats).sort((a, b) => b[1].count - a[1].count).forEach(([dept, data]) => {
+                let bd = '<div class="accident-breakdown">';
+                if (data.types["加害"] > 0) bd += `<span class="breakdown-item harm">加害 ${data.types["加害"]}</span>`;
+                if (data.types["被害"] > 0) bd += `<span class="breakdown-item victim">被害 ${data.types["被害"]}</span>`;
+                if (data.types["自損自弁"] > 0) bd += `<span class="breakdown-item self">自損 ${data.types["自損自弁"]}</span>`;
+                bd += '</div>';
+                const avgCost = data.count > 0 ? data.total / data.count : 0;
+                deptHTML += `<tr><td><strong>${dept}</strong></td><td><span class="badge ${data.count >= 5 ? 'badge-danger' : 'badge-warning'}">${data.count}件</span></td><td>${bd}</td><td>¥${data.total.toLocaleString()}</td><td>¥${Math.round(avgCost).toLocaleString()}</td></tr>`;
+            });
+            document.querySelector("#departmentStatsTable tbody").innerHTML = deptHTML;
+            
+            let officeHTML = '';
+            Object.entries(officeStats).sort((a, b) => {
+                if (b[1].count !== a[1].count) return b[1].count - a[1].count;
+                return a[0].localeCompare(b[0], 'ja');
+            }).forEach(([office, data]) => {
+                let bd = '<div class="accident-breakdown">';
+                if (data.count === 0) {
+                    bd += '<span class="breakdown-item" style="background:#e0f7e0;color:#2e7d32">✅ 事故なし</span>';
+                } else {
+                    if (data.types["加害"] > 0) bd += `<span class="breakdown-item harm">加害 ${data.types["加害"]}</span>`;
+                    if (data.types["被害"] > 0) bd += `<span class="breakdown-item victim">被害 ${data.types["被害"]}</span>`;
+                    if (data.types["自損自弁"] > 0) bd += `<span class="breakdown-item self">自損 ${data.types["自損自弁"]}</span>`;
+                }
+                bd += '</div>';
+                const rowClass = data.count === 0 ? 'zero-row' : data.count >= 3 ? 'highlight-row' : '';
+                const badgeClass = data.count === 0 ? 'badge-success' : data.count >= 3 ? 'badge-danger' : 'badge-warning';
+                officeHTML += `<tr class="${rowClass}"><td><strong>${office}</strong></td><td>${data.dept}</td><td><span class="badge ${badgeClass}">${data.count}件</span></td><td>${bd}</td><td>¥${data.total.toLocaleString()}</td></tr>`;
+            });
+            document.querySelector("#officeStatsTable tbody").innerHTML = officeHTML;
+            
+            const driverCount = {};
+            allAccidents.forEach(acc => {
+                if (!driverCount[acc.driver]) {
+                    driverCount[acc.driver] = {
+                        count: 0,
+                        total: 0,
+                        office: acc.office,
+                        types: { "加害": 0, "被害": 0, "自損自弁": 0 },
+                        years: { "2023": 0, "2024": 0, "2025": 0 }
+                    };
+                }
+                driverCount[acc.driver].count++;
+                driverCount[acc.driver].total += acc.total;
+                driverCount[acc.driver].types[acc.type]++;
+                const yearKey = acc.year === 2023 ? "2023" : acc.year === 2024 ? "2024" : "2025";
+                driverCount[acc.driver].years[yearKey]++;
+            });
+            
+            let driverHTML = '';
+            const repeatDrivers = Object.entries(driverCount).filter(([d, data]) => data.count > 1);
+            
+            if (repeatDrivers.length === 0) {
+                driverHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">✅ 複数回事故者はいません</td></tr>';
+            } else {
+                repeatDrivers.sort((a, b) => b[1].count - a[1].count).forEach(([driver, data]) => {
+                    let bd = '<div class="accident-breakdown">';
+                    if (data.types["加害"] > 0) bd += `<span class="breakdown-item harm">🚗 加害 ${data.types["加害"]}</span>`;
+                    if (data.types["被害"] > 0) bd += `<span class="breakdown-item victim">🛡️ 被害 ${data.types["被害"]}</span>`;
+                    if (data.types["自損自弁"] > 0) bd += `<span class="breakdown-item self">🔧 自損 ${data.types["自損自弁"]}</span>`;
+                    bd += '</div>';
+                    
+                    let yd = '<div class="year-detail">';
+                    const yearParts = [];
+                    if (data.years["2023"] > 0) yearParts.push(`2023年度: ${data.years["2023"]}件`);
+                    if (data.years["2024"] > 0) yearParts.push(`2024年度: ${data.years["2024"]}件`);
+                    if (data.years["2025"] > 0) yearParts.push(`2025年度: ${data.years["2025"]}件`);
+                    yd += yearParts.join(' / ');
+                    yd += '</div>';
+                    
+                    driverHTML += `<tr><td>🚙</td><td>${driver}${yd}</td><td>${data.office}</td><td><span class="badge badge-danger">${data.count}回</span></td><td>${bd}</td><td>¥${data.total.toLocaleString()}</td></tr>`;
+                });
+            }
+            document.querySelector("#repeatOffendersTable tbody").innerHTML = driverHTML;
+        }
+        
+        function updateDashboard() {
+            displayStats();
+            updateCharts();
+            updateTables();
+            if (comparisonMode) updateComparisonCharts();
+            
+            const compareBtn = document.getElementById('comparisonToggle');
+            if (currentYear === 'all') {
+                compareBtn.disabled = true;
+                compareBtn.style.opacity = '0.5';
+                compareBtn.title = '通年表示では年度比較は利用できません';
+                if (comparisonMode) {
+                    comparisonMode = false;
+                    compareBtn.classList.remove('active');
+                    compareBtn.textContent = '📊 年度比較を表示';
+                    document.getElementById('comparisonSection').classList.remove('active');
+                }
+            } else {
+                compareBtn.disabled = false;
+                compareBtn.style.opacity = '1';
+                compareBtn.title = '';
+            }
+        }
+        
+        document.querySelectorAll('.year-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.year-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const yearValue = this.dataset.year;
+                currentYear = yearValue === 'all' ? 'all' : parseInt(yearValue);
+                currentAccidents = getCurrentYearAccidents();
+                updateDashboard();
+            });
+        });
+        
+        document.getElementById('comparisonToggle').addEventListener('click', function() {
+            if (currentYear === 'all') return;
+            comparisonMode = !comparisonMode;
+            this.classList.toggle('active');
+            this.textContent = comparisonMode ? '📊 年度比較を非表示' : '📊 年度比較を表示';
+            document.getElementById('comparisonSection').classList.toggle('active');
+            updateDashboard();
+        });
+        
+        document.getElementById('detailsToggle').addEventListener('click', function() {
+            this.classList.toggle('active');
+            this.textContent = this.classList.contains('active') ? '📈 時系列分析を非表示' : '📈 時系列分析を表示';
+            document.getElementById('detailsSection').classList.toggle('active');
+        });
+        
+        loadFromStorage();
+        updateLastUpdatedTime();
+        
+        const totalStored = accidents2023.length + accidents2024.length + accidents2025.length;
+        if (totalStored === 0) {
+            loadDefaultCSV();
+        } else {
+            updateDashboard();
+        }
+    </script>
+</body>
+</html>
